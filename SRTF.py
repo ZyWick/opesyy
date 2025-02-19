@@ -1,58 +1,47 @@
 import operator
 import statistics as s
+from SchedulingStrategy import SchedulingStrategy
 
-def getWaitTime (process, time):
-    # get the last time the current process has been preempted or arrived to compute wait time
-    if (process.last_end_time >= process.arrival_time):
-        last = process.last_end_time
-    else:
-        last = process.arrival_time
-    process.wait_time = process.wait_time  + time - last
+class SRTF(SchedulingStrategy):
+    def execute(self, process_array, quantum_value=1):
+        def get_wait_time(process, time):
+            last = max(process.last_end_time, process.arrival_time)
+            process.wait_time += time - last
 
-def runSRTF (process_array):
-    time = 0;
-    allprocess = process_array.copy()
-    queue = []
-    prev_process = None
+        time = 0
+        allprocess = process_array.copy()
+        queue = []
+        prev_process = None
 
-    while (not not allprocess or not not queue):
+        while allprocess or queue:
+            # Add all arrived processes to the queue
+            queue.extend(filter(lambda process: process.arrival_time <= time, allprocess))
+            allprocess = [p for p in allprocess if p.arrival_time > time]
 
-        #add all process that's arrived to the queue
-        queue.extend(filter(lambda process: process.arrival_time <= time, allprocess))
-        allprocess = [process for process in allprocess if process.arrival_time > time]
+            if queue:
+                # Sort queue by burst_time, then arrival_time, then pid
+                queue.sort(key=operator.attrgetter("burst_time", "arrival_time", "pid"))
+                process = queue[0]
 
-        if (not not queue):
-            
-            # sort queue on attributes
-            queue = sorted(queue, key=operator.attrgetter('burst_time', 'arrival_time', 'pid'))
-            process = queue[0]
-            
-            # set start and wait time 
-            # for when there's no process directly running before
-            # for when the previous process has been preempted 
-            if (prev_process == None or prev_process.pid != process.pid):
-                process.start_time = time;
-                getWaitTime (process, time)                
+                # Set start time and wait time if needed
+                if prev_process is None or prev_process.pid != process.pid:
+                    process.start_time = time
+                    get_wait_time(process, time)
 
-                # Enter if the previous process has been preempted
-                if (prev_process != None):
-                    # log the time the previous process was preempted and print values
-                    prev_process.last_end_time = time
-                    print("P[{}] start time: {} end time: {} | Waiting time: {}".format(prev_process.pid, prev_process.start_time, prev_process.last_end_time, prev_process.wait_time))
+                    if prev_process:
+                        prev_process.last_end_time = time
+                        print(f"P[{prev_process.pid}] start time: {prev_process.start_time} end time: {prev_process.last_end_time} | Waiting time: {prev_process.wait_time}")
 
-            #set the current process
-            prev_process = process
+                prev_process = process
 
-            #decrease burst time and pop the process if completed
-            process.burst_time = process.burst_time - 1;
-            if (process.burst_time == 0):
-                process.last_end_time = time + 1
-                print("P[{}] start time: {} end time: {} | Waiting time: {}".format(process.pid, process.start_time, process.last_end_time, process.wait_time))
-                queue.pop(0)
-                prev_process = None
-    
-        time += 1;
+                # Execute process for 1 time unit
+                process.burst_time -= 1
+                if process.burst_time == 0:
+                    process.last_end_time = time + 1
+                    print(f"P[{process.pid}] start time: {process.start_time} end time: {process.last_end_time} | Waiting time: {process.wait_time}")
+                    queue.pop(0)
+                    prev_process = None
 
-    print("Average waiting time: ", format(s.mean(p.wait_time for p in process_array), ".2f"))
+            time += 1
 
-    
+        print("Average waiting time: ", format(s.mean(p.wait_time for p in process_array), ".2f"))
